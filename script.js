@@ -46,15 +46,19 @@ async function insertLead(fullName, phone, email) {
       })
     });
 
-    if (response.ok) {
-      console.log('✅ Lead inserted:', referenceCode);
-      return referenceCode;
-    } else {
-      console.error('❌ Supabase error:', response.status);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('❌ Supabase error:', response.status, errorData);
+      alert('❌ Lỗi lưu thông tin. Vui lòng kiểm tra kết nối internet và thử lại.');
       return null;
     }
+
+    const data = await response.json();
+    console.log('✅ Lead inserted:', referenceCode);
+    return referenceCode;
   } catch (error) {
     console.error('❌ Error inserting lead:', error);
+    alert('❌ Lỗi kết nối. Vui lòng thử lại sau.');
     return null;
   }
 }
