@@ -1,5 +1,5 @@
 // api/webhook-sepay.js
-// Webhook nhận từ Sepay → Update Supabase → Gửi email qua Resend API
+// Bank Webhook từ Sepay → Parse nội dung CK → Find khách → Email
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
@@ -16,27 +16,63 @@ export default async function handler(req, res) {
 
   try {
     const body = req.body;
-    console.log('📩 Sepay webhook:', JSON.stringify(body));
+    console.log('📩 Bank Webhook received:', JSON.stringify(body, null, 2));
 
-    const referenceCode = body.referenceCode || body.content || body.description || '';
-    const transferAmount = body.transferAmount || body.amount || 0;
+    // Parse Bank Webhook format
+    // Expected: { content: "2Brain 0931546814", transferAmount: 299000, transferType: "in" }
+    const content = body.content || '';
+    const transferAmount = parseInt(body.transferAmount || 0);
 
-    if (!referenceCode) return res.status(400).json({ error: 'Missing referenceCode' });
-    if (transferAmount < 299000) return res.status(400).json({ error: 'Amount insufficient' });
+    console.log('Content:', content, 'Amount:', transferAmount);
 
-    // 1. Tìm lead
+    // Validate amount
+    if (transferAmount < 299000) {
+      console.log('⚠️ Amount insufficient:', transferAmount);
+      return res.status(400).json({ error: 'Amount insufficient' });
+    }
+
+    // Extract phone từ nội dung (format: "2Brain 0931546814")
+    // Regex để lấy số điện thoại 10 chữ số
+    const phoneMatch = content.match(/0\d{9}/);
+    if (!phoneMatch) {
+      console.log('⚠️ Phone not found in content:', content);
+      return res.status(400).json({ error: 'Phone not found in content' });
+    }
+
+    const phoneNumber = phoneMatch[0];
+    console.log('📱 Phone extracted:', phoneNumber);
+
+    // 1. Tìm lead theo phone trong Supabase
     const findRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/leads?reference_code=eq.${referenceCode}&select=*`,
-      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+      `${SUPABASE_URL}/rest/v1/leads?phone=eq.${phoneNumber}&select=*`,
+      {
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+      }
     );
+
     const leads = await findRes.json();
-    if (!leads || leads.length === 0) return res.status(404).json({ error: 'Lead not found' });
+    console.log('Search result:', leads);
+
+    if (!leads || leads.length === 0) {
+      console.log('⚠️ Lead not found for phone:', phoneNumber);
+      return res.status(404).json({ error: 'Lead not found', phone: phoneNumber });
+    }
 
     const lead = leads[0];
+    console.log('✅ Lead found:', lead.full_name, lead.email);
 
-    // 2. Update payment_status
-    await fetch(
-      `${SUPABASE_URL}/rest/v1/leads?reference_code=eq.${referenceCode}`,
+    // Check payment_status không phải "completed" rồi để tránh spam
+    if (lead.payment_status === 'completed') {
+      console.log('ℹ️ Already paid:', lead.phone);
+      return res.status(200).json({ success: true, message: 'Already paid' });
+    }
+
+    // 2. Update payment_status = completed
+    const updateRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/leads?phone=eq.${phoneNumber}`,
       {
         method: 'PATCH',
         headers: {
@@ -52,6 +88,8 @@ export default async function handler(req, res) {
         })
       }
     );
+
+    console.log('✅ Payment status updated');
 
     // 3. Gửi email qua Resend
     const firstName = lead.full_name.split(' ').pop();
@@ -92,7 +130,7 @@ export default async function handler(req, res) {
     });
 
     console.log('✅ Email sent to:', lead.email);
-    return res.status(200).json({ success: true });
+    return res.status(200).json({ success: true, phone: phoneNumber, email: lead.email });
 
   } catch (error) {
     console.error('❌ Error:', error);
