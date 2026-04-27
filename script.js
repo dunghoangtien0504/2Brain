@@ -70,9 +70,10 @@ async function insertLead(fullName, phone, email) {
 }
 
 // ═══ SEPAY: Generate QR Code URL ═══
-async function generateSepayQR(referenceCode, amount, accountNo) {
-  // VietQR API format: https://img.vietqr.io/image/{BANK}-{ACCOUNT}-{TEMPLATE}.jpg?amount={AMOUNT}&addInfo={INFO}
-  const qrUrl = `https://img.vietqr.io/image/MB-${accountNo}-compact2.jpg?amount=${amount}&addInfo=${referenceCode}&accountName=HOANG%20TIEN%20DUNG`;
+async function generateSepayQR(phone, amount, accountNo) {
+  // QR content = "2Brain {phone}" để webhook extract được số điện thoại
+  const addInfo = encodeURIComponent(`2Brain ${phone}`);
+  const qrUrl = `https://img.vietqr.io/image/MB-${accountNo}-compact2.jpg?amount=${amount}&addInfo=${addInfo}&accountName=HOANG%20TIEN%20DUNG`;
   console.log('✅ QR URL:', qrUrl);
   return qrUrl;
 }
@@ -137,26 +138,26 @@ function handleSubmit() {
     document.querySelector('.payment-section').style.display = 'block';
     
     // 3. Generate & display Sepay QR
-    const qrUrl = await generateSepayQR(referenceCode, PAYMENT_CONFIG.amount, PAYMENT_CONFIG.accountNo);
+    const qrUrl = await generateSepayQR(phoneValue, PAYMENT_CONFIG.amount, PAYMENT_CONFIG.accountNo);
     if (qrUrl) {
       document.getElementById('sepayQR').src = qrUrl;
       document.getElementById('sepayQRContainer').style.display = 'block';
     }
     
-    // Store referenceCode để polling
-    window.currentReferenceCode = referenceCode;
-    startPaymentPolling(referenceCode);
+    // Store phone để polling
+    window.currentPhone = phoneValue;
+    startPaymentPolling(phoneValue);
   });
 }
 
 // ═══ POLLING: Cek tình trạng thanh toán ═══
-function startPaymentPolling(referenceCode) {
+function startPaymentPolling(phone) {
   let checkCount = 0;
   const maxChecks = 180; // 15 phút với interval 5 giây
   
   const pollInterval = setInterval(async () => {
     checkCount++;
-    const paid = await checkPaymentStatus(referenceCode);
+    const paid = await checkPaymentStatus(phone);
     
     if (paid) {
       clearInterval(pollInterval);
@@ -170,10 +171,10 @@ function startPaymentPolling(referenceCode) {
 }
 
 // ═══ SUPABASE: Check payment status ═══
-async function checkPaymentStatus(referenceCode) {
+async function checkPaymentStatus(phone) {
   try {
     const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/leads?reference_code=eq.${referenceCode}&select=payment_status`,
+      `${SUPABASE_URL}/rest/v1/leads?phone=eq.${phone}&select=payment_status`,
       {
         headers: {
           'apikey': SUPABASE_KEY,
