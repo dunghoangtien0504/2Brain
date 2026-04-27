@@ -312,9 +312,9 @@
   .demo-cards{grid-template-columns:1fr;gap:10px}
   .guarantee-grid{grid-template-columns:1fr;gap:10px}
   .founder-grid{grid-template-columns:1fr;gap:32px}
-  .founder-photo{position:static;flex-direction:row;align-items:flex-start}
-  .founder-photo-placeholder{width:140px;height:140px;flex-shrink:0}
-  .founder-meta{flex:1}
+  .founder-photo{position:static;flex-direction:column;align-items:stretch}
+  .founder-photo-placeholder{width:100%;aspect-ratio:1;overflow:hidden}
+  .founder-meta{flex:1;margin-top:0}
 }
 @media(max-width:600px){
   .v2-honest-box{padding:30px 22px}

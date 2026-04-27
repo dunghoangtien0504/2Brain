@@ -128,6 +128,10 @@ function handleSubmit() {
     document.getElementById('confirmEmail').textContent = emailValue;
     window.currentEmail = emailValue;
     
+    // Auto-fill transfer note with phone
+    document.getElementById('transferNote').textContent = `2Brain ${phoneValue}`;
+    document.getElementById('transferNoteDisplay').textContent = `2Brain ${phoneValue}`;
+    
     // Hide form, show payment
     document.querySelector('.form-wrapper').style.display = 'none';
     document.querySelector('.payment-section').style.display = 'block';
