@@ -5,7 +5,7 @@
 .hero-inner{max-width:760px;margin:0 auto;position:relative;z-index:2;animation:fadeUp .9s ease-out}
 .hero-tag{display:inline-flex;align-items:center;gap:8px;background:var(--white);color:var(--orange);font-size:12px;font-weight:700;padding:8px 18px;border-radius:100px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:28px;border:.6px solid var(--border-2);box-shadow:var(--shadow-sm)}
 .hero-tag .dot{width:6px;height:6px;background:var(--orange);border-radius:50%;animation:pulse 2s infinite;box-shadow:0 0 10px rgba(255,107,44,.5)}
-.hero h1{font-size:clamp(36px,6vw,64px);font-weight:900;line-height:1.06;color:var(--text);margin-bottom:24px;letter-spacing:-.045em}
+.hero h1{font-size:clamp(26px,4vw,48px);font-weight:900;line-height:1.1;color:var(--text);margin-bottom:24px;letter-spacing:-.03em}
 .hero h1 em{font-style:normal;background:var(--gradient-main);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .hero-sub{font-size:17px;color:var(--text-muted);line-height:1.8;max-width:520px;margin:0 auto 44px}
 .hero-price-block{display:inline-flex;align-items:center;gap:18px;background:var(--white);border:.6px solid var(--border-2);border-radius:var(--radius);padding:18px 30px;margin-bottom:36px;flex-wrap:wrap;justify-content:center;box-shadow:var(--shadow-md);position:relative}
