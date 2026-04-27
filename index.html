@@ -436,26 +436,51 @@
         </div>
         <div class="order-countdown-deadline">Sau 23h59 ngày 1/5/2026 → giá tăng lên 499.000đ</div>
       </div>
-      <div id="formSection" class="order-form">
+      <div class="form-wrapper" id="formWrapper">
         <div class="form-group"><label class="form-label" for="fullname">Họ và tên <span>*</span></label><input type="text" id="fullname" class="form-input" placeholder="Nguyễn Văn A"><span class="form-error" id="err-fullname">Vui lòng nhập họ tên</span></div>
         <div class="form-group"><label class="form-label" for="phone">Số điện thoại Zalo <span>*</span></label><input type="tel" id="phone" class="form-input" placeholder="0901 234 567" inputmode="numeric"><span class="form-error" id="err-phone">Vui lòng nhập SĐT hợp lệ (10 số)</span></div>
         <div class="form-group"><label class="form-label" for="email">Email nhận file <span>*</span></label><input type="email" id="email" class="form-input" placeholder="email@gmail.com"><span class="form-error" id="err-email">Vui lòng nhập email hợp lệ</span></div>
-        <button class="form-submit" onclick="handleSubmit()">Tiếp Theo — Xem Thông Tin Thanh Toán →</button>
+        <button id="submitForm" class="form-submit">Tiếp Theo — Xem Thông Tin Thanh Toán →</button>
         <p class="form-guarantee">🔒 Thông tin bảo mật · Không spam · Không chia sẻ bên thứ ba</p>
       </div>
-      <div id="paymentSection" class="payment-section">
+      <div id="paymentSection" class="payment-section" style="display:none;">
         <div class="payment-card">
           <div class="payment-header"><h3>Thanh toán 299.000đ</h3><p>Chuyển khoản ngân hàng — nhận file ngay</p></div>
           <div class="payment-body">
             <div class="payment-greeting">Chào <strong id="greetingName">bạn</strong>! Mình sẽ gửi file về <strong id="greetingEmail">email</strong> và nhắn xác nhận qua Zalo <strong id="greetingPhone"></strong> sau khi nhận CK — thường trong 15 phút. 🙌</div>
             <div class="payment-methods">
-              <div class="payment-method"><div class="payment-method-header"><span class="method-badge">Phổ biến</span><h4>Chuyển khoản / VietQR</h4></div><div class="payment-method-body"><div class="qr-placeholder" id="vietqrBox">📱 Đặt QR VietQR vào đây</div><div class="bank-info"><div class="bank-row"><span class="bank-row-label">Ngân hàng</span><span class="bank-row-value">MB Bank</span></div><div class="bank-row"><span class="bank-row-label">Số TK</span><span class="bank-row-value" id="bankNum">333303838</span><button class="copy-btn" onclick="copyText('bankNum',this)">Copy</button></div><div class="bank-row"><span class="bank-row-label">Chủ TK</span><span class="bank-row-value">HOÀNG TIẾN DŨNG</span></div><div class="bank-row"><span class="bank-row-label">Số tiền</span><span class="bank-row-value orange" id="amountDisplay">299.000đ</span><button class="copy-btn" onclick="copyText('amountDisplay',this)">Copy</button></div><div class="bank-row"><span class="bank-row-label">Nội dung CK</span><span class="bank-row-value" id="transferNote">SecondBrainAI [SĐT]</span><button class="copy-btn" onclick="copyText('transferNote',this)">Copy</button></div></div><div class="transfer-note">📌 Nội dung CK: <strong id="transferNoteDisplay">SecondBrainAI + số điện thoại</strong><br>Ví dụ: <strong>SecondBrainAI 0901234567</strong></div></div></div>
+              <div class="payment-method"><div class="payment-method-header"><span class="method-badge">Phổ biến</span><h4>Chuyển khoản / VietQR</h4></div><div class="payment-method-body">
+              <!-- QR CODE DISPLAY -->
+              <div id="sepayQRContainer" style="text-align:center;margin:20px 0;display:none;">
+                <p style="color:#666;margin-bottom:10px;">📱 Quét mã QR để thanh toán</p>
+                <img id="sepayQR" src="" alt="Sepay QR Code" style="max-width:300px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+                <p style="color:#999;font-size:12px;margin-top:10px;">Hệ thống tự nhận biết thanh toán. Kiên nhẫn chờ 5-10 giây...</p>
+              </div>
+              <div id="sepayError" style="display:none;color:#d32f2f;padding:15px;background:#ffebee;border-radius:6px;">
+                ⚠️ Không thể tạo QR. Vui lòng chuyển khoản bằng thông tin ngân hàng bên dưới.
+              </div>
+              <div class="bank-info"><div class="bank-row"><span class="bank-row-label">Ngân hàng</span><span class="bank-row-value">MB Bank</span></div><div class="bank-row"><span class="bank-row-label">Số TK</span><span class="bank-row-value" id="bankNum">333303838</span><button class="copy-btn" onclick="copyText('bankNum',this)">Copy</button></div><div class="bank-row"><span class="bank-row-label">Chủ TK</span><span class="bank-row-value">HOÀNG TIẾN DŨNG</span></div><div class="bank-row"><span class="bank-row-label">Số tiền</span><span class="bank-row-value orange" id="amountDisplay">299.000đ</span><button class="copy-btn" onclick="copyText('amountDisplay',this)">Copy</button></div><div class="bank-row"><span class="bank-row-label">Nội dung CK</span><span class="bank-row-value" id="transferNote">SecondBrainAI [SĐT]</span><button class="copy-btn" onclick="copyText('transferNote',this)">Copy</button></div></div><div class="transfer-note">📌 Nội dung CK: <strong id="transferNoteDisplay">SecondBrainAI + số điện thoại</strong><br>Ví dụ: <strong>SecondBrainAI 0901234567</strong></div></div></div>
             </div>
             <div class="payment-note-final">Sau khi CK, <strong>nhắn qua Zalo</strong> để xác nhận nhanh hơn. File gửi về <strong id="confirmEmail">email</strong> trong tối đa <strong>15 phút</strong>.</div>
             <button class="back-btn" onclick="goBack()">← Quay lại chỉnh sửa thông tin</button>
           </div>
         </div>
       </div>
+      <!-- SUCCESS MESSAGE -->
+      <div class="payment-success" style="display:none;text-align:center;padding:40px 20px;">
+        <div style="font-size:60px;margin-bottom:20px;">🎉</div>
+        <h2 style="color:#FF6B2C;margin-bottom:15px;font-size:28px;">Thanh Toán Thành Công!</h2>
+        <p style="color:#666;font-size:16px;line-height:1.6;margin-bottom:30px;">
+          Cảm ơn bạn đã tin tưởng Content OS. Email chứa file Notion + link Group VIP sẽ được gửi trong 5-15 phút.<br>
+          <strong>Nhắn tin Zalo để xác nhận nhanh hơn:</strong><br>
+          Dũng Hoàng: <a href="https://zalo.me/0901234567" style="color:#FF6B2C;text-decoration:none;">0901234567</a>
+        </p>
+        <div style="background:#f0f7ff;padding:20px;border-radius:10px;border-left:4px solid #FF6B2C;margin-bottom:30px;">
+          <p style="margin:0;color:#333;"><strong>📧 Email:</strong> <span id="successEmail"></span></p>
+          <p style="margin:10px 0 0 0;color:#666;font-size:14px;">Check cả Gmail inbox và spam folder</p>
+        </div>
+        <a href="https://t.me/your_group_link" class="btn-primary" style="display:inline-block;margin:10px;">👥 Vào Nhóm VIP →</a>
+        <p style="color:#999;font-size:12px;margin-top:30px;">Nếu chưa nhận email trong 30 phút, vui lòng liên hệ lại.</p>
     </div>
   </div>
 </section>
