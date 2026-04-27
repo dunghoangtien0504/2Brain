@@ -73,11 +73,24 @@ async function insertLead(fullName, phone, email) {
 async function generateSepayQR(referenceCode, amount, accountNo) {
   const memo = referenceCode;
   
-  // Fallback: Tạo QR static từ Vietcombank API
-  // Format: https://api.vietqr.io/image/{BANK}/{ACCOUNT}/{AMOUNT}/{DESCRIPTION}.jpg
+  // Try Vietcombank QR first
   const qrUrl = `https://api.vietqr.io/image/MB/${accountNo}/${amount}/${memo}.jpg`;
-  console.log('✅ QR URL generated:', qrUrl);
-  return qrUrl;
+  
+  // Test if image loads
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      console.log('✅ QR loaded from Vietcombank API');
+      resolve(qrUrl);
+    };
+    img.onerror = () => {
+      // Fallback: use static QR
+      console.warn('⚠️ QR API failed, using fallback');
+      const fallbackQR = `https://api.vietqr.io/image/MB/${accountNo}/${amount}/${memo}.jpg?format=text`;
+      resolve(fallbackQR);
+    };
+    img.src = qrUrl;
+  });
 }
 
 // ═══ FORM: Handle Submit ═══
@@ -222,7 +235,9 @@ function copyText(elementId, btn) {
 
 // ═══ UI: Countdown timer ═══
 function initCountdown() {
+  // Deadline: 2026-05-01 23:59:59 GMT+7
   const deadline = new Date('2026-05-01T23:59:59+07:00').getTime();
+  console.log('⏰ Countdown deadline:', new Date(deadline));
   
   setInterval(() => {
     const now = new Date().getTime();
