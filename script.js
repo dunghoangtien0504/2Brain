@@ -71,26 +71,10 @@ async function insertLead(fullName, phone, email) {
 
 // ═══ SEPAY: Generate QR Code URL ═══
 async function generateSepayQR(referenceCode, amount, accountNo) {
-  const memo = referenceCode;
-  
-  // Try Vietcombank QR first
-  const qrUrl = `https://api.vietqr.io/image/MB/${accountNo}/${amount}/${memo}.jpg`;
-  
-  // Test if image loads
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      console.log('✅ QR loaded from Vietcombank API');
-      resolve(qrUrl);
-    };
-    img.onerror = () => {
-      // Fallback: use static QR
-      console.warn('⚠️ QR API failed, using fallback');
-      const fallbackQR = `https://api.vietqr.io/image/MB/${accountNo}/${amount}/${memo}.jpg?format=text`;
-      resolve(fallbackQR);
-    };
-    img.src = qrUrl;
-  });
+  // VietQR API format: https://img.vietqr.io/image/{BANK}-{ACCOUNT}-{TEMPLATE}.jpg?amount={AMOUNT}&addInfo={INFO}
+  const qrUrl = `https://img.vietqr.io/image/MB-${accountNo}-compact2.jpg?amount=${amount}&addInfo=${referenceCode}&accountName=HOANG%20TIEN%20DUNG`;
+  console.log('✅ QR URL:', qrUrl);
+  return qrUrl;
 }
 
 // ═══ FORM: Handle Submit ═══
@@ -235,18 +219,17 @@ function copyText(elementId, btn) {
 
 // ═══ UI: Countdown timer ═══
 function initCountdown() {
-  // Deadline: 2026-05-01 23:59:59 GMT+7
   const deadline = new Date('2026-05-01T23:59:59+07:00').getTime();
-  console.log('⏰ Countdown deadline:', new Date(deadline));
   
-  setInterval(() => {
+  function updateCountdown() {
     const now = new Date().getTime();
     const timeLeft = deadline - now;
     
     if (timeLeft < 0) {
-      document.querySelectorAll('[data-countdown]').forEach(el => {
-        el.innerHTML = 'Ưu đãi đã kết thúc';
-      });
+      document.getElementById('cd-days').textContent = '00';
+      document.getElementById('cd-hours').textContent = '00';
+      document.getElementById('cd-minutes').textContent = '00';
+      document.getElementById('cd-seconds').textContent = '00';
       return;
     }
     
@@ -255,11 +238,16 @@ function initCountdown() {
     const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
     
-    const display = `${days}d ${hours}h ${minutes}m ${seconds}s`;
-    document.querySelectorAll('[data-countdown]').forEach(el => {
-      el.textContent = display;
-    });
-  }, 1000);
+    const pad = n => String(n).padStart(2, '0');
+    
+    document.getElementById('cd-days').textContent = pad(days);
+    document.getElementById('cd-hours').textContent = pad(hours);
+    document.getElementById('cd-minutes').textContent = pad(minutes);
+    document.getElementById('cd-seconds').textContent = pad(seconds);
+  }
+  
+  updateCountdown();
+  setInterval(updateCountdown, 1000);
 }
 
 // ═══ SCROLL REVEAL ═══
