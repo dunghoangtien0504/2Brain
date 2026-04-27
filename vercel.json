@@ -1,0 +1,8 @@
+{
+     "functions": {
+       "api/webhook-sepay.js": {
+         "memory": 512,
+         "maxDuration": 30
+       }
+     }
+   }
