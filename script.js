@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// Content OS V2 - Form → Sepay Order API → Payment Gateway IPN
+// Content OS V2 - script.js
 // ═══════════════════════════════════════════════════════════
 
 const SUPABASE_URL = 'https://qmmiuqztukpagbuigzma.supabase.co';
@@ -7,46 +7,33 @@ const SUPABASE_KEY = 'sb_publishable_84npGxaLGDO5bH5ArCYVGw_Kb6I9Xse';
 
 // ═══ SUPABASE: Insert lead ═══
 async function insertLead(fullName, phone, email, orderId) {
-  const leadData = {
-    full_name: fullName,
-    phone,
-    email,
-    amount: 299000,
-    payment_status: 'pending',
-    order_id: orderId, // Track by order_id
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
-
   try {
-    const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/leads`,
-      {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation'
-        },
-        body: JSON.stringify(leadData)
-      }
-    );
-
-    if (response.ok) {
-      console.log('✅ Lead inserted');
-      return orderId;
-    } else {
-      console.log('⚠️ Insert response:', response.status);
-      return orderId;
-    }
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
+        full_name: fullName,
+        phone,
+        email,
+        amount: 299000,
+        payment_status: 'pending',
+        order_id: orderId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+    });
+    console.log('✅ Lead inserted:', response.status);
   } catch (err) {
-    console.error('⚠️ Insert error (non-critical):', err.message);
-    return orderId;
+    console.error('⚠️ Insert error:', err.message);
   }
 }
 
-// ═══ SEPAY: Gọi API tạo order + QR ═══
+// ═══ SEPAY: Tạo order ═══
 async function createSepayOrder(phone, fullName, email) {
   try {
     const response = await fetch('/api/create-order-sepay', {
@@ -54,9 +41,7 @@ async function createSepayOrder(phone, fullName, email) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone, fullName, email, amount: 299000 })
     });
-
     const result = await response.json();
-    
     if (result.success) {
       console.log('✅ Order created:', result.orderId);
       return result;
@@ -70,145 +55,139 @@ async function createSepayOrder(phone, fullName, email) {
   }
 }
 
-// ═══ MAIN: Form submission ═══
-document.getElementById('paymentForm').addEventListener('submit', async (e) => {
+// ═══ MAIN: Submit form ═══
+document.getElementById('submitForm').addEventListener('click', async (e) => {
   e.preventDefault();
 
-  const nameValue = document.getElementById('fullName').value.trim();
+  const nameValue = document.getElementById('fullname').value.trim();
   const phoneValue = document.getElementById('phone').value.trim();
   const emailValue = document.getElementById('email').value.trim();
 
-  if (!nameValue || !phoneValue || !emailValue) {
-    alert('Vui lòng điền đủ thông tin');
-    return;
-  }
+  // Validate
+  let hasError = false;
+  if (!nameValue) { document.getElementById('err-fullname').style.display = 'block'; hasError = true; }
+  else { document.getElementById('err-fullname').style.display = 'none'; }
+  if (!/^0\d{9}$/.test(phoneValue)) { document.getElementById('err-phone').style.display = 'block'; hasError = true; }
+  else { document.getElementById('err-phone').style.display = 'none'; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) { document.getElementById('err-email').style.display = 'block'; hasError = true; }
+  else { document.getElementById('err-email').style.display = 'none'; }
+  if (hasError) return;
 
-  // Show loading
-  document.getElementById('paymentSection').style.display = 'none';
-  document.getElementById('loadingSection').style.display = 'block';
+  // Disable button
+  const btn = document.getElementById('submitForm');
+  btn.disabled = true;
+  btn.textContent = 'Đang xử lý...';
 
   try {
-    // 1. Create Sepay order
+    // 1. Tạo order Sepay
     const orderResult = await createSepayOrder(phoneValue, nameValue, emailValue);
-    if (!orderResult) {
-      alert('Lỗi tạo đơn hàng. Vui lòng thử lại!');
-      location.reload();
-      return;
-    }
 
-    const orderId = orderResult.orderId;
-
-    // 2. Insert lead
-    await insertLead(nameValue, phoneValue, emailValue, orderId);
-
-    // 3. Show QR
+    // 2. Show payment section
+    document.getElementById('formWrapper').style.display = 'none';
+    document.getElementById('paymentSection').style.display = 'block';
     document.getElementById('greetingName').textContent = nameValue.split(' ').pop();
     document.getElementById('greetingEmail').textContent = emailValue;
     document.getElementById('greetingPhone').textContent = phoneValue;
-    document.getElementById('qrImage').src = orderResult.qrCode;
+    document.getElementById('confirmEmail').textContent = emailValue;
+
+    // 3. Fill transfer note với phone
     document.getElementById('transferNote').textContent = `2Brain ${phoneValue}`;
+    document.getElementById('transferNoteDisplay').textContent = `2Brain ${phoneValue}`;
 
-    document.getElementById('loadingSection').style.display = 'none';
-    document.getElementById('qrSection').style.display = 'block';
+    let orderId;
 
-    // 4. Start polling for payment
+    if (orderResult) {
+      orderId = orderResult.orderId;
+      // Show QR từ Sepay API
+      document.getElementById('sepayQR').src = orderResult.qrCode;
+      document.getElementById('sepayQRContainer').style.display = 'block';
+    } else {
+      // Fallback: dùng VietQR tĩnh
+      const addInfo = encodeURIComponent(`2Brain ${phoneValue}`);
+      const qrUrl = `https://img.vietqr.io/image/MB-333303838-compact2.jpg?amount=299000&addInfo=${addInfo}&accountName=HOANG%20TIEN%20DUNG`;
+      document.getElementById('sepayQR').src = qrUrl;
+      document.getElementById('sepayQRContainer').style.display = 'block';
+      // Tạo orderId tạm
+      orderId = 'CO' + Date.now();
+    }
+
+    // 4. Insert lead
+    await insertLead(nameValue, phoneValue, emailValue, orderId);
+    window.currentOrderId = orderId;
+
+    // 5. Start polling
     startPaymentPolling(orderId);
 
   } catch (err) {
     console.error('Form error:', err);
+    btn.disabled = false;
+    btn.textContent = 'Tiếp Theo — Xem Thông Tin Thanh Toán →';
     alert('Lỗi: ' + err.message);
-    location.reload();
   }
 });
 
-// ═══ Polling: Check payment status ═══
+// ═══ Polling ═══
 async function checkPaymentStatus(orderId) {
   try {
     const response = await fetch(
       `${SUPABASE_URL}/rest/v1/leads?order_id=eq.${orderId}&select=payment_status`,
-      {
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`
-        }
-      }
+      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
     );
-
     const data = await response.json();
-
-    if (data.length > 0 && data[0].payment_status === 'completed') {
-      return true;
-    }
-    return false;
+    return data.length > 0 && data[0].payment_status === 'completed';
   } catch (err) {
-    console.error('Polling error:', err);
     return false;
   }
 }
 
 function startPaymentPolling(orderId) {
   let checks = 0;
-  const maxChecks = 180; // 15 phút
-
   const pollInterval = setInterval(async () => {
     checks++;
-    console.log(`⏳ Check ${checks}/180...`);
-
     const paid = await checkPaymentStatus(orderId);
     if (paid) {
       clearInterval(pollInterval);
-      console.log('✅ Payment confirmed!');
-      
-      document.getElementById('qrSection').style.display = 'none';
-      document.getElementById('successSection').style.display = 'block';
-      
-      // Redirect after 3 seconds
-      setTimeout(() => {
-        window.location.href = 'https://www.notion.so/AI2Brain-M-u-b631c4caec0b821b97f881db282341a5';
-      }, 3000);
-      return;
+      // Show success
+      document.getElementById('paymentSection').style.display = 'none';
+      document.querySelector('.payment-success').style.display = 'block';
+      document.getElementById('successEmail').textContent = document.getElementById('greetingEmail').textContent;
     }
+    if (checks >= 180) clearInterval(pollInterval);
+  }, 5000);
+}
 
-    if (checks >= maxChecks) {
-      clearInterval(pollInterval);
-      console.log('⏱️ Timeout');
-      alert('Hết thời gian. Vui lòng tải lại trang.');
-      location.reload();
-    }
-  }, 5000); // Check every 5 seconds
+// ═══ Go back ═══
+function goBack() {
+  document.getElementById('paymentSection').style.display = 'none';
+  document.getElementById('formWrapper').style.display = 'block';
+  const btn = document.getElementById('submitForm');
+  btn.disabled = false;
+  btn.textContent = 'Tiếp Theo — Xem Thông Tin Thanh Toán →';
+}
+
+// ═══ Copy ═══
+function copyText(id, btn) {
+  const text = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 2000);
+  });
 }
 
 // ═══ Countdown ═══
 function initCountdown() {
   const deadline = new Date('2026-05-01T23:59:59+07:00');
-
-  function updateCountdown() {
-    const now = new Date();
-    const diff = deadline - now;
-
-    if (diff <= 0) {
-      document.getElementById('cd-days').textContent = '00';
-      document.getElementById('cd-hours').textContent = '00';
-      document.getElementById('cd-minutes').textContent = '00';
-      document.getElementById('cd-seconds').textContent = '00';
-      return;
-    }
-
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-    const minutes = Math.floor((diff / (1000 * 60)) % 60);
-    const seconds = Math.floor((diff / 1000) % 60);
-
-    const pad = (n) => String(n).padStart(2, '0');
-    document.getElementById('cd-days').textContent = pad(days);
-    document.getElementById('cd-hours').textContent = pad(hours);
-    document.getElementById('cd-minutes').textContent = pad(minutes);
-    document.getElementById('cd-seconds').textContent = pad(seconds);
+  function update() {
+    const diff = deadline - new Date();
+    if (diff <= 0) { ['cd-days','cd-hours','cd-minutes','cd-seconds'].forEach(id => document.getElementById(id).textContent = '00'); return; }
+    const pad = n => String(n).padStart(2,'0');
+    document.getElementById('cd-days').textContent = pad(Math.floor(diff/86400000));
+    document.getElementById('cd-hours').textContent = pad(Math.floor(diff/3600000)%24);
+    document.getElementById('cd-minutes').textContent = pad(Math.floor(diff/60000)%60);
+    document.getElementById('cd-seconds').textContent = pad(Math.floor(diff/1000)%60);
   }
-
-  updateCountdown();
-  setInterval(updateCountdown, 1000);
+  update();
+  setInterval(update, 1000);
 }
 
-// Init
 document.addEventListener('DOMContentLoaded', initCountdown);
