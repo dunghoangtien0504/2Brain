@@ -130,7 +130,7 @@ document.getElementById('submitForm').addEventListener('click', async (e) => {
       console.log('✅ Got orderId:', orderId);
     } else {
       // ✅ Fallback: tạo DH orderId local nếu API fail
-      orderId = 'DH' + Date.now();
+      orderId = 'DH' + String(Date.now()).slice(-10);
       const addInfo = encodeURIComponent(orderId);
       qrUrl = `https://img.vietqr.io/image/MB-333303838-compact2.jpg?amount=299000&addInfo=${addInfo}&accountName=HOANG%20TIEN%20DUNG`;
       console.log('⚠️ Using fallback orderId:', orderId);
