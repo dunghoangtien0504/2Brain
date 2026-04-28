@@ -3,7 +3,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const NOTION_LINK = 'https://www.notion.so/AI2B8rain-M-u-b631c4cec0b821b97f881db2823341s3?source=copy_link';
-const TELEGRAM_LINK = 'https://t.me/+4JQYxuCd9wljHjll1';
+const TELEGRAM_LINK = 'https://t.me/+ju9HuPOviThhMmU1';
 const FROM_EMAIL = 'onboarding@resend.dev';
 
 export default async function handler(req, res) {
