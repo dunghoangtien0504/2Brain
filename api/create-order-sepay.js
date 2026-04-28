@@ -1,17 +1,8 @@
 // api/create-order-sepay.js
-// Gọi Sepay API để tạo order + QR code động
-
-import crypto from 'crypto';
-
-const SEPAY_MERCHANT_ID = process.env.SEPAY_MERCHANT_ID;
-const SEPAY_SECRET_KEY = process.env.SEPAY_SECRET_KEY;
-const SEPAY_API_URL = 'https://api.sepay.vn/v2/payment/gateway';
-
-function signRequest(data) {
-  const sortedKeys = Object.keys(data).sort();
-  const signString = sortedKeys.map(key => `${key}=${data[key]}`).join('&');
-  return crypto.createHmac('sha256', SEPAY_SECRET_KEY).update(signString).digest('hex');
-}
+// ✅ FIXED v3:
+// - orderId dùng tiền tố DH (khớp cấu hình SePay)
+// - VietQR tạo QR trực tiếp (không qua Sepay Gateway → luôn hoạt động)
+// - Transfer content = orderId (DH...) → SePay tự nhận diện code
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -25,55 +16,31 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing phone or amount' });
     }
 
-    // Tạo order ID unique (phone + timestamp)
-    const orderId = `CO${Date.now()}`;
+    // ✅ FIX 1: orderId dùng DH prefix để SePay nhận diện đúng
+    // Ví dụ: DH1777391893418 → SePay sẽ tự detect code = "DH1777391893418"
+    const orderId = 'DH' + Date.now();
 
-    // Prepare request data
-    const requestData = {
-      merchant_id: SEPAY_MERCHANT_ID,
-      amount: Math.floor(amount), // Phải là số nguyên
-      order_code: orderId,
-      order_description: `2Brain ${phone}`, // Content CK
-      return_url: 'https://2brain.hoangtiendung.com/success',
-      notify_url: 'https://2brain.hoangtiendung.com/api/webhook-sepay',
-      buyer_name: fullName,
-      buyer_email: email,
-      buyer_phone: phone
-    };
+    // ✅ FIX 2: Dùng VietQR API trực tiếp — KHÔNG qua Sepay Gateway
+    // VietQR luôn hoạt động, không cần API key
+    // addInfo = orderId → đây là nội dung chuyển khoản khách sẽ ghi
+    const addInfo = encodeURIComponent(orderId);
+    const qrCode = `https://img.vietqr.io/image/MB-333303838-compact2.jpg?amount=${Math.floor(amount)}&addInfo=${addInfo}&accountName=HOANG%20TIEN%20DUNG`;
 
-    // Sign request
-    requestData.signature = signRequest(requestData);
+    console.log(`✅ [CREATE-ORDER] orderId=${orderId}, amount=${amount}, phone=${phone}`);
+    console.log(`✅ [CREATE-ORDER] QR URL: ${qrCode}`);
 
-    console.log('📤 Sepay API request:', orderId, amount);
-
-    // Call Sepay API
-    const response = await fetch(SEPAY_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestData)
-    });
-
-    const data = await response.json();
-    console.log('📥 Sepay API response:', data);
-
-    if (!data.data || !data.data.qr_code) {
-      console.error('❌ Sepay error:', data);
-      return res.status(400).json({ error: 'Failed to create order', details: data });
-    }
-
-    // Return order info
+    // ✅ Return thành công
     return res.status(200).json({
       success: true,
-      orderId,
-      qrCode: data.data.qr_code,
+      orderId,       // "DH1777391893418"
+      qrCode,        // VietQR image URL
       amount,
-      phone
+      phone,
+      transferContent: orderId  // Nội dung KH cần ghi khi CK
     });
 
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('❌ [CREATE-ORDER] Error:', error.message);
     return res.status(500).json({ error: error.message });
   }
 }
