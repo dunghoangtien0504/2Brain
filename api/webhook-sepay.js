@@ -1,9 +1,9 @@
-// api/webhook-sepay.js
-// Payment Gateway IPN Webhook from Sepay
+// api/webhook-sepay.js - FIXED VERSION
+// Xử lý đúng Sepay webhook payload
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
-const RESEND_API_KEY = process.env.RESEND_API_KEY; // ✅ FIX: Use RESEND_API_KEY instead of SMTP_PASS
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const NOTION_LINK = 'https://www.notion.so/AI2B8rain-M-u-b631c4cec0b821b97f881db2823341s3?source=copy_link';
 const TELEGRAM_LINK = 'https://t.me/+4JQYxuCd9wljHjll1';
 const FROM_EMAIL = 'onboarding@resend.dev';
@@ -15,66 +15,120 @@ export default async function handler(req, res) {
 
   try {
     const body = req.body;
+    console.log('🔔 [WEBHOOK] Sepay IPN received:', JSON.stringify(body, null, 2));
 
-    console.log('📩 [WEBHOOK] IPN received:', JSON.stringify(body, null, 2));
-
-    // Expected: { order_code: "CO1234567", amount: 299000, status: "success", ... }
-    const orderId = body.order_code || body.id || '';
+    // Extract order code from Sepay payload
+    // Sepay sends: order_code, id, transaction_id, etc.
+    const orderId = body.order_code || body.transaction_id || body.id || '';
     const amount = parseInt(body.amount) || 0;
-    const status = body.status || body.transaction_status || '';
+    const status = body.status || 'unknown';
+
+    console.log(`📝 [WEBHOOK] Parsed: orderId=${orderId}, amount=${amount}, status=${status}`);
 
     if (!orderId) {
-      console.log('⚠️ [WEBHOOK] Missing order_code');
+      console.log('⚠️ [WEBHOOK] Missing order identifier');
       return res.status(400).json({ error: 'Missing order_code' });
     }
 
-    // Query Supabase for lead
-    const queryUrl = `${SUPABASE_URL}/rest/v1/leads?order_id=eq.${orderId}&select=id,full_name,email,phone,payment_status`;
-    const queryRes = await fetch(queryUrl, {
+    // 🔑 FIX: Try multiple search strategies
+    let lead = null;
+    let queryUrl = '';
+
+    // Strategy 1: Search by order_id (exact match)
+    queryUrl = `${SUPABASE_URL}/rest/v1/leads?order_id=eq.${orderId}&select=*`;
+    console.log(`🔍 [WEBHOOK] Strategy 1 - Search by order_id=${orderId}`);
+    
+    let queryRes = await fetch(queryUrl, {
       headers: {
         'apikey': SUPABASE_KEY,
         'Authorization': `Bearer ${SUPABASE_KEY}`
       }
     });
 
-    if (!queryRes.ok) {
-      console.error('❌ [WEBHOOK] Supabase query error:', queryRes.status);
-      return res.status(500).json({ error: 'Database error' });
+    if (queryRes.ok) {
+      const leads = await queryRes.json();
+      if (leads && leads.length > 0) {
+        lead = leads[0];
+        console.log(`✅ [WEBHOOK] Found by order_id`);
+      }
     }
 
-    const leads = await queryRes.json();
+    // Strategy 2: If not found, search by reference_code
+    if (!lead) {
+      queryUrl = `${SUPABASE_URL}/rest/v1/leads?reference_code=eq.${orderId}&select=*`;
+      console.log(`🔍 [WEBHOOK] Strategy 2 - Search by reference_code=${orderId}`);
+      
+      queryRes = await fetch(queryUrl, {
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+      });
 
-    if (!leads || leads.length === 0) {
-      console.error('❌ [WEBHOOK] Lead not found:', orderId);
-      return res.status(404).json({ error: 'Lead not found' });
+      if (queryRes.ok) {
+        const leads = await queryRes.json();
+        if (leads && leads.length > 0) {
+          lead = leads[0];
+          console.log(`✅ [WEBHOOK] Found by reference_code`);
+        }
+      }
     }
 
-    const lead = leads[0];
+    // Strategy 3: If still not found, log all recent leads (for debugging)
+    if (!lead) {
+      console.error(`❌ [WEBHOOK] Lead not found with orderId=${orderId}`);
+      console.log('📋 [WEBHOOK] Fetching recent leads for debugging...');
+      
+      const debugUrl = `${SUPABASE_URL}/rest/v1/leads?order=created_at.desc&limit=5&select=id,order_id,reference_code,full_name,email`;
+      const debugRes = await fetch(debugUrl, {
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+      });
+
+      if (debugRes.ok) {
+        const recentLeads = await debugRes.json();
+        console.log('📋 [WEBHOOK] Recent leads:', JSON.stringify(recentLeads, null, 2));
+      }
+
+      return res.status(404).json({ 
+        error: 'Lead not found',
+        searchedId: orderId,
+        message: 'Check logs for recent leads'
+      });
+    }
+
     const fullName = lead.full_name || 'Customer';
     const email = lead.email;
     const phone = lead.phone;
 
+    console.log(`✅ [WEBHOOK] Lead found: ${fullName} (${email})`);
+
     // Check if already completed
     if (lead.payment_status === 'completed') {
-      console.log('⚠️ [WEBHOOK] Payment already processed:', orderId);
-      return res.status(200).json({ success: true, orderId, message: 'Already processed' });
+      console.log(`⚠️ [WEBHOOK] Payment already processed: ${lead.order_id}`);
+      return res.status(200).json({ 
+        success: true, 
+        orderId: lead.order_id,
+        message: 'Already processed' 
+      });
     }
 
-    // Validate payment
-    if (status !== 'success' && status !== 'completed') {
-      console.log('⚠️ [WEBHOOK] Invalid payment status:', status);
+    // Validate payment status
+    const validStatuses = ['success', 'completed', 'COMPLETED'];
+    if (!validStatuses.includes(status)) {
+      console.log(`⚠️ [WEBHOOK] Invalid payment status: ${status}`);
       return res.status(400).json({ error: 'Invalid payment status' });
     }
 
-    if (amount !== 299000) {
-      console.warn('⚠️ [WEBHOOK] Amount mismatch:', amount, 'expected 299000');
-      // Don't fail - Sepay might have fees
+    if (amount !== 299000 && amount !== 0) { // Allow 0 for manual tests
+      console.warn(`⚠️ [WEBHOOK] Amount mismatch: ${amount} (expected 299000)`);
     }
 
-    console.log(`✅ [WEBHOOK] Valid payment: ${orderId} — ${amount}đ`);
-    console.log(`✅ [WEBHOOK] Lead found: ${fullName} — ${email}`);
+    console.log(`✅ [WEBHOOK] Valid payment confirmed: ${amount}đ`);
 
-    // Update payment status to completed
+    // Update payment status
     const updateUrl = `${SUPABASE_URL}/rest/v1/leads?id=eq.${lead.id}`;
     const updateRes = await fetch(updateUrl, {
       method: 'PATCH',
@@ -86,30 +140,39 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         payment_status: 'completed',
-        reference_code: orderId,
+        delivered_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
     });
 
     if (!updateRes.ok) {
-      console.error('❌ [WEBHOOK] Supabase update error:', updateRes.status);
+      console.error(`❌ [WEBHOOK] Supabase update error: ${updateRes.status}`);
       return res.status(500).json({ error: 'Update failed' });
     }
 
-    console.log(`✅ [WEBHOOK] Payment status updated to: completed`);
+    console.log(`✅ [WEBHOOK] Database updated: payment_status=completed`);
 
-    // Send email via Resend
+    // Send email
+    let emailSent = false;
+    let emailError = null;
+
     try {
+      console.log(`📧 [EMAIL] Sending to: ${email}`);
+      console.log(`📧 [EMAIL] API Key exists: ${!!RESEND_API_KEY}`);
+      if (RESEND_API_KEY) {
+        console.log(`📧 [EMAIL] API Key prefix: ${RESEND_API_KEY.substring(0, 15)}...`);
+      }
+
       const emailRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${RESEND_API_KEY}`, // ✅ CORRECT KEY
+          'Authorization': `Bearer ${RESEND_API_KEY}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           from: FROM_EMAIL,
           to: email,
-          subject: '✅ Thanh Toán Thành Công - 2Brain Content OS',
+          subject: '✅ Thanh Toán Thành Công - 2Brain',
           html: `
             <h1>🎉 Thanh Toán Thành Công!</h1>
             <p>Xin chào <strong>${fullName}</strong>,</p>
@@ -119,34 +182,38 @@ export default async function handler(req, res) {
               <li>👥 Nhóm Telegram VIP: <a href="${TELEGRAM_LINK}">Vào nhóm</a></li>
             </ul>
             <p><strong>Nếu cần hỗ trợ:</strong> Liên hệ Zalo: 0931546814</p>
-            <p>Cảm ơn bạn đã tin tưởng Content OS!</p>
+            <p>Cảm ơn bạn đã tin tưởng 2Brain!</p>
           `
         })
       });
 
+      console.log(`📧 [EMAIL] Response status: ${emailRes.status}`);
+      const emailData = await emailRes.json();
+
       if (!emailRes.ok) {
-        const emailErr = await emailRes.json();
-        console.error('❌ [WEBHOOK] Resend error:', emailErr);
-        // Don't fail webhook - payment was processed
+        console.error(`❌ [EMAIL] Resend error (${emailRes.status}):`, emailData);
+        emailError = emailData?.message || `HTTP ${emailRes.status}`;
       } else {
-        console.log(`✅ [WEBHOOK] Email sent to: ${email}`);
+        console.log(`✅ [EMAIL] Sent successfully:`, emailData?.id);
+        emailSent = true;
       }
     } catch (emailErr) {
-      console.error('❌ [WEBHOOK] Email send error:', emailErr.message);
-      // Don't fail webhook
+      console.error(`❌ [EMAIL] Exception:`, emailErr.message);
+      emailError = emailErr.message;
     }
 
-    // Success response
     return res.status(200).json({
       success: true,
-      orderId,
+      orderId: lead.order_id,
       email,
-      emailSent: true,
-      message: 'Payment processed successfully'
+      emailSent,
+      emailError: emailError || null,
+      message: 'Payment processed'
     });
 
   } catch (err) {
-    console.error('❌ [WEBHOOK] Error:', err.message);
+    console.error(`❌ [WEBHOOK] Fatal error: ${err.message}`);
+    console.error(`❌ [WEBHOOK] Stack:`, err.stack);
     return res.status(500).json({ error: err.message });
   }
 }
