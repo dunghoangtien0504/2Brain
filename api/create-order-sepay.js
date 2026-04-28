@@ -18,7 +18,7 @@ export default async function handler(req, res) {
 
     // ✅ FIX 1: orderId dùng DH prefix để SePay nhận diện đúng
     // Ví dụ: DH1777391893418 → SePay sẽ tự detect code = "DH1777391893418"
-    const orderId = 'DH' + Date.now();
+    const orderId = 'DH' + String(Date.now()).slice(-10); // Max 12 chars, fits bank limit
 
     // ✅ FIX 2: Dùng VietQR API trực tiếp — KHÔNG qua Sepay Gateway
     // VietQR luôn hoạt động, không cần API key
