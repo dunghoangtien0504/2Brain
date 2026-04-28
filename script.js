@@ -1,8 +1,9 @@
 // ═══════════════════════════════════════════════════════════
-// Content OS V2 - script.js — FINAL VERSION
-// ✅ Updated SUPABASE_KEY (New key from 2026-04-28)
-// ✅ Better error handling
-// ✅ Improved user feedback
+// Content OS V2 - script.js — FIXED v3
+// ✅ orderId dùng DH prefix (khớp SePay config)
+// ✅ Transfer note hiển thị orderId (DH...) thay vì "2Brain phone"
+// ✅ Polling theo orderId (DH prefix)
+// ✅ Fallback QR dùng DH prefix
 // ═══════════════════════════════════════════════════════════
 
 const SUPABASE_URL = 'https://qmmiuqztukpagbuigzma.supabase.co';
@@ -47,7 +48,7 @@ async function insertLead(fullName, phone, email, orderId) {
 // ═══ SEPAY: Tạo order ═══
 async function createSepayOrder(phone, fullName, email) {
   try {
-    console.log('🔄 Creating Sepay order...');
+    console.log('🔄 Creating order...');
     const response = await fetch('/api/create-order-sepay', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -55,7 +56,7 @@ async function createSepayOrder(phone, fullName, email) {
     });
 
     const responseText = await response.text();
-    console.log('📥 Sepay API response:', responseText);
+    console.log('📥 API response:', responseText);
 
     let result;
     try {
@@ -69,7 +70,7 @@ async function createSepayOrder(phone, fullName, email) {
       console.log('✅ Order created:', result.orderId);
       return result;
     } else {
-      console.error('❌ Sepay error:', result.error, result.details);
+      console.error('❌ Order error:', result.error);
       return null;
     }
   } catch (err) {
@@ -117,38 +118,34 @@ document.getElementById('submitForm').addEventListener('click', async (e) => {
   btn.textContent = 'Đang xử lý...';
 
   try {
-    // 1. Tạo order Sepay
+    // 1. Tạo order (luôn trả về DH prefix + VietQR)
     const orderResult = await createSepayOrder(phoneValue, nameValue, emailValue);
     let orderId;
+    let qrUrl;
 
     if (orderResult && orderResult.orderId) {
-      // Success case: Got real order from Sepay
-      orderId = orderResult.orderId;
-      console.log('✅ Got real orderId from Sepay:', orderId);
-      
-      // Show QR từ Sepay API
-      document.getElementById('sepayQR').src = orderResult.qrCode;
-      document.getElementById('sepayQRContainer').style.display = 'block';
-      document.getElementById('sepayError').style.display = 'none';
-      
+      // ✅ Success: dùng orderId và QR từ API
+      orderId = orderResult.orderId; // "DH1777391893418"
+      qrUrl = orderResult.qrCode;
+      console.log('✅ Got orderId:', orderId);
     } else {
-      // Fallback: Sepay API failed — dùng VietQR tĩnh
-      console.log('⚠️ Sepay order failed, using fallback VietQR');
-      orderId = 'CO' + Date.now();
-      
-      const addInfo = encodeURIComponent(`2Brain ${phoneValue}`);
-      const qrUrl = `https://img.vietqr.io/image/MB-333303838-compact2.jpg?amount=299000&addInfo=${addInfo}&accountName=HOANG%20TIEN%20DUNG`;
-      
-      document.getElementById('sepayQR').src = qrUrl;
-      document.getElementById('sepayQRContainer').style.display = 'block';
-      document.getElementById('sepayError').style.display = 'block';
+      // ✅ Fallback: tạo DH orderId local nếu API fail
+      orderId = 'DH' + Date.now();
+      const addInfo = encodeURIComponent(orderId);
+      qrUrl = `https://img.vietqr.io/image/MB-333303838-compact2.jpg?amount=299000&addInfo=${addInfo}&accountName=HOANG%20TIEN%20DUNG`;
+      console.log('⚠️ Using fallback orderId:', orderId);
     }
 
-    // 2. Insert lead vào Supabase
+    // 2. Hiện QR code
+    document.getElementById('sepayQR').src = qrUrl;
+    document.getElementById('sepayQRContainer').style.display = 'block';
+    document.getElementById('sepayError').style.display = 'none';
+
+    // 3. Insert lead vào Supabase với orderId DH prefix
     await insertLead(nameValue, phoneValue, emailValue, orderId);
     window.currentOrderId = orderId;
 
-    // 3. Show payment section
+    // 4. Show payment section
     document.getElementById('formWrapper').style.display = 'none';
     document.getElementById('paymentSection').style.display = 'block';
     document.getElementById('greetingName').textContent = nameValue.split(' ').pop();
@@ -156,11 +153,12 @@ document.getElementById('submitForm').addEventListener('click', async (e) => {
     document.getElementById('greetingPhone').textContent = phoneValue;
     document.getElementById('confirmEmail').textContent = emailValue;
 
-    // 4. Fill transfer note với phone
-    document.getElementById('transferNote').textContent = `2Brain ${phoneValue}`;
-    document.getElementById('transferNoteDisplay').textContent = `2Brain ${phoneValue}`;
+    // ✅ FIX: Transfer note hiển thị orderId (DH...) thay vì "2Brain phone"
+    // Đây là nội dung khách cần ghi khi chuyển khoản → SePay sẽ nhận ra "DH..."
+    document.getElementById('transferNote').textContent = orderId;
+    document.getElementById('transferNoteDisplay').textContent = orderId;
 
-    // 5. Start polling
+    // 5. Start polling theo orderId
     startPaymentPolling(orderId);
 
   } catch (err) {
@@ -206,19 +204,17 @@ async function checkPaymentStatus(orderId) {
 function startPaymentPolling(orderId) {
   console.log('🔄 Starting payment polling for:', orderId);
   let checks = 0;
-  const maxChecks = 180; // 15 minutes (180 * 5s)
+  const maxChecks = 180; // 15 phút (180 * 5s)
   
   const pollInterval = setInterval(async () => {
     checks++;
-    console.log(`🔍 Poll check ${checks}/${maxChecks}`);
+    console.log(`🔍 Poll ${checks}/${maxChecks} — orderId: ${orderId}`);
     
     const paid = await checkPaymentStatus(orderId);
     
     if (paid) {
       clearInterval(pollInterval);
-      console.log('🎉 Payment success! Showing success message...');
-      
-      // Show success
+      console.log('🎉 Payment success!');
       document.getElementById('paymentSection').style.display = 'none';
       document.querySelector('.payment-success').style.display = 'block';
       document.getElementById('successEmail').textContent = document.getElementById('greetingEmail').textContent;
@@ -228,7 +224,7 @@ function startPaymentPolling(orderId) {
       clearInterval(pollInterval);
       console.log('⏰ Polling timeout after 15 minutes');
     }
-  }, 5000); // Poll every 5 seconds
+  }, 5000);
 }
 
 // ═══ Go back ═══
@@ -299,7 +295,7 @@ function initReveal() {
 
 // ═══ Init ═══
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('✅ Script loaded - SUPABASE_KEY updated 2026-04-28');
+  console.log('✅ Script loaded - FIXED v3 - DH prefix + VietQR');
   initCountdown();
   initReveal();
 });
